@@ -100,14 +100,16 @@ export class AppService {
         throw new Error('Token URL is null');
       }
 
-      await this.sendTx(data.storyaddress, this.tokenUrl);
+      const txResult = await this.sendTx(data.storyaddress, this.tokenUrl);
       console.log('Story Protocol TX 보내기 완료');
       this.status = Status.COMPLETE;
+      this.txResult = txResult;
     } catch (error) {
       console.log(error);
       this.status = Status.NONE;
       this.mbti = null;
       this.tokenUrl = null;
+      this.txResult = null;
     }
   }
 
