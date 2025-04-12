@@ -6,12 +6,12 @@ import IpCreatorAbi from './abis/IpCreatorAbi.json';
 import { walletClient, account } from './utils/walletClient';
 import { encodeFunctionData, createPublicClient, http, getAddress } from 'viem';
 
-const CONTRACT_ADDRESS = '0xEF0d19D24DB6f7eBD3fB2Afab1e835083625a732';
+const CONTRACT_ADDRESS = '0xB3e993c87c17E2B64B03c5d14FE0adE4F6a72d57';
 
 @Injectable()
 export class AppService {
   private status: Status = Status.NONE;
-  private mbti: string | null = null; // ✅ 추가
+  private mbti: string | null = null;
   private tokenUrl: string | null = null;
   private txResult: string | null = null;
 
@@ -52,27 +52,59 @@ export class AppService {
 
     try {
       // FOR TETS
-      // const response = await axios.post(
-      //   'http://localhost:1234/request-analyze',
-      //   {
-      //     sourceAddress: data.sourceaddress,
-      //     storyAddress: data.storyaddress,
-      //     sourceChainId: data.sourcechainId,
-      //   },
-      // );
+      const requestData = {
+        sourceAddress: data.sourceaddress,
+        storyAddress: data.storyaddress,
+        sourceChainId: data.sourcechainId,
+      };
 
-      // this.mbti = response.data?.mbti || 'Unknown';
-      // this.tokenUrl = response.data?.tokenUrl || null;
-      this.mbti = 'ENTP';
-      this.tokenUrl =
-        'https://aidrop-test.s3.ap-southeast-2.amazonaws.com/aa.json';
+      const response = await axios.post(
+        'http://localhost:8000/analyze',
+        requestData,
+      );
+      let requestId = response.data?.requestId;
+
+      let isCompleted = false;
+      let resultData = null;
+
+      while (!isCompleted) {
+        console.log(`Polling for results with requestId: ${requestId}`);
+
+        const pollResponse = await axios.post(
+          'http://localhost:8000/api/result',
+          {
+            requestId: requestId,
+          },
+        );
+
+        if (pollResponse.data.status === 'completed') {
+          isCompleted = true;
+          resultData = pollResponse.data;
+        } else if (pollResponse.data.status === 'processing') {
+          // 3초 대기 후 다시 폴링
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        } else {
+          // 에러 상태 또는 예상치 못한 상태
+          throw new Error(`Unexpected status: ${pollResponse.data.status}`);
+        }
+      }
+
+      this.mbti = (resultData as any)?.mbti || 'Unknown';
+      this.tokenUrl = (resultData as any)?.tokenUrl || null;
+      // this.mbti = 'ENTP';
+      // this.tokenUrl =
+      //   'https://aidrop-test.s3.amazonaws.com/profiles/1/0x0bb9aec3b681d0a5a65d1b27c7b7a3e1f8a95d71/bfdebe469b01de67f73637e981cea53f_metadata.json';
+
       this.status = Status.MININT_IP;
+      if (!this.tokenUrl) {
+        throw new Error('Token URL is null');
+      }
 
       await this.sendTx(data.storyaddress, this.tokenUrl);
-      console.log('Story Protocol TX 보내기 완료'); // Story Protocol TX 보내는 함수
-
+      console.log('Story Protocol TX 보내기 완료');
       this.status = Status.COMPLETE;
     } catch (error) {
+      console.log(error);
       this.status = Status.NONE;
       this.mbti = null;
       this.tokenUrl = null;
